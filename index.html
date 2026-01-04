@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Transaction Manager - Persistent & Auto-Sync</title>
+    <title>Transaction Manager - Full Row Sync</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
@@ -23,6 +23,7 @@
 
         .content-area { padding: 25px; }
         button { padding: 9px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 13px; display: inline-flex; align-items: center; gap: 5px; transition: 0.2s; }
+        button:active { transform: scale(0.95); }
         
         .counter-badge { background: #e2e8f0; padding: 8px 12px; border-radius: 6px; font-weight: bold; font-size: 13px; color: var(--dark); border: 1px solid #cbd5e0; }
 
@@ -53,6 +54,12 @@
         .panel { display: none; margin-bottom: 25px; border: 1px solid #ddd; padding: 20px; border-radius: 10px; background: white; }
         .modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border-radius: 12px; z-index: 1100; width: 320px; }
         .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 1050; }
+
+        @media print {
+            .sticky-header, .panel, .btn-group, button, input { display: none !important; }
+            table { width: 100%; border: 1px solid black !important; }
+            th, td { border: 1px solid black !important; color: black; }
+        }
     </style>
 </head>
 
@@ -62,6 +69,7 @@
     <button style="background:var(--primary); color:white" onclick="showModal('uploadModal')">➕ Upload</button>
     <button style="background:var(--purple); color:white" onclick="togglePanel('historySection')">📋 History</button>
     <button style="background:var(--warning); color:black" onclick="togglePanel('recycleBinSection')">🗑️ Bin</button>
+    
     <div class="counter-badge">Total Records: <span id="totalDataCount">0</span></div>
 
     <div class="dropdown">
@@ -74,8 +82,10 @@
     </div>
     
     <div class="search-container">
-        <input type="text" id="searchInput" oninput="initSearch()" placeholder="🔍 Search...">
+        <input type="text" id="searchInput" oninput="initSearch()" onkeydown="handleSearchKey(event)" placeholder="🔍 Search records..." style="border:none; background:transparent; outline:none; padding:5px; width:150px;">
         <span id="searchCount">0/0</span>
+        <button style="padding:5px; background:#ddd;" onclick="navSearch(-1)">▲</button>
+        <button style="padding:5px; background:#ddd;" onclick="navSearch(1)">▼</button>
     </div>
 </div>
 
@@ -89,14 +99,14 @@
 
 <div class="modal" id="uploadModal">
     <h3>Upload Data</h3>
-    <input type="date" id="uploadDate" style="padding:10px; width:100%; margin-bottom:15px; border:1px solid #ddd;">
+    <input type="date" id="uploadDate" style="padding:10px; width:100%; margin-bottom:15px; border:1px solid #ddd; border-radius:6px;">
     <button style="background:var(--success); color:white; width:100%" onclick="triggerFileInput()">Confirm & Open</button>
 </div>
 
 <div class="modal" id="exportModal">
-    <h3>Export Range</h3>
-    <input type="date" id="exportFrom" style="width:100%; margin-bottom:10px;">
-    <input type="date" id="exportTo" style="width:100%; margin-bottom:20px;">
+    <h3 id="exportModalTitle">Export Range</h3>
+    <label>FROM</label><input type="date" id="exportFrom" style="padding:10px; width:100%; margin-bottom:10px;">
+    <label>TO</label><input type="date" id="exportTo" style="padding:10px; width:100%; margin-bottom:20px;">
     <button id="confirmExportBtn" style="background:var(--success); color:white; width:100%">Process Export</button>
 </div>
 
@@ -106,29 +116,17 @@
 const scriptURL = 'https://script.google.com/macros/s/AKfycbxskq3zkvUKMsyUJ7TB8GoSmIHqnYWQtpNHzgdBXl-Sb_daWezOmiDaOXrm_9IRYgAX/exec';
 
 let allUploadedData = []; 
-
-// --- 1. LOAD DATA ON REFRESH ---
-window.onload = function() {
-    const saved = localStorage.getItem('transactionData');
-    if (saved) {
-        allUploadedData = JSON.parse(saved);
-        renderAll();
-        // Refresh history UI
-        allUploadedData.forEach(f => {
-            if(f.active) addToHistoryUI(f.id, f.name, f.date);
-        });
-    }
-};
-
-// --- 2. SAVE DATA TO LOCAL STORAGE ---
-function saveToLocal() {
-    localStorage.setItem('transactionData', JSON.stringify(allUploadedData));
-}
+let fileCounter = 0;
+let searchMatches = [];
+let currentSearchIdx = -1;
 
 function toggleDropdown() { document.getElementById("downloadDropdown").classList.toggle("show"); }
+window.onclick = function(e) { if (!e.target.matches('.dropdown button')) { var ds = document.getElementsByClassName("dropdown-content"); for (var i=0; i<ds.length; i++) ds[i].classList.remove('show'); } }
+
 function showModal(id) { document.getElementById(id).style.display = 'block'; document.getElementById('overlay').style.display = 'block'; }
 function hideAllModals() { document.querySelectorAll('.modal').forEach(m => m.style.display = 'none'); document.getElementById('overlay').style.display = 'none'; }
-function showExportModal(t) { showModal('exportModal'); document.getElementById('confirmExportBtn').onclick = () => executeExport(t); }
+function showExportModal(t) { document.getElementById('exportModalTitle').innerText = `Export ${t.toUpperCase()}`; showModal('exportModal'); document.getElementById('confirmExportBtn').onclick = () => executeExport(t); }
+
 function triggerFileInput() { if(!document.getElementById('uploadDate').value) return alert("Select date!"); document.getElementById('fileInput').click(); hideAllModals(); }
 
 document.getElementById("fileInput").addEventListener("change", function (e) {
@@ -139,34 +137,21 @@ document.getElementById("fileInput").addEventListener("change", function (e) {
         let workbook = XLSX.read(new Uint8Array(e.target.result), { type: "array" });
         let rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: "" });
         let cleaned = strictClean(rawRows);
-        let fileId = "file_" + Date.now(); // Unique ID using timestamp
+        let fileId = "file_" + (++fileCounter);
         let dataRows = cleaned.map(r => ({ data: r, comment: "", locked: false }));
-        
-        let newFile = { id: fileId, name: file.name, date: document.getElementById('uploadDate').value, rows: dataRows, active: true };
-        allUploadedData.push(newFile);
-        
-        saveToLocal(); // Persistent save
+        allUploadedData.push({ id: fileId, name: file.name, date: document.getElementById('uploadDate').value, rows: dataRows, active: true });
         renderAll();
-        addToHistoryUI(fileId, file.name, newFile.date);
-
-        // --- 3. AUTO-SYNC FULL DATA TO GOOGLE ON UPLOAD ---
-        dataRows.forEach((row, index) => {
-            if(index > 0) { // Skip header
-                syncToGoogle({
-                    fileName: file.name,
-                    rowData: row.data.join(" | "),
-                    comment: "AUTO-SYNC ON UPLOAD"
-                });
-            }
-        });
+        addToHistoryUI(fileId, file.name, document.getElementById('uploadDate').value);
     };
     reader.readAsArrayBuffer(file);
 });
 
-async function syncToGoogle(payload) {
-    try {
-        await fetch(scriptURL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
-    } catch(e) { console.error("Sync fail", e); }
+function strictClean(rows) {
+    let nonEmpty = rows.filter(r => r.some(c => c !== null && c.toString().trim() !== ""));
+    let maxCols = Math.max(...nonEmpty.map(r => r.length));
+    let valid = [];
+    for (let c = 0; c < maxCols; c++) { if (nonEmpty.some(r => r[c] !== "" && r[c] !== null)) valid.push(c); }
+    return nonEmpty.map(r => valid.map(idx => r[idx] || ""));
 }
 
 function renderAll() {
@@ -174,10 +159,13 @@ function renderAll() {
     let head = document.getElementById("tableHead");
     body.innerHTML = "";
     let active = allUploadedData.filter(f => f.active);
-    document.getElementById("totalDataCount").innerText = active.reduce((acc, f) => acc + (f.rows.length - 1), 0);
+    
+    let count = 0;
+    active.forEach(f => count += (f.rows.length - 1));
+    document.getElementById("totalDataCount").innerText = count;
 
     if (active.length === 0) { head.innerHTML = ""; return; }
-    head.innerHTML = "<tr>" + active[0].rows[0].data.map(h => `<th>${h}</th>`).join('') + "<th>Action</th></tr>";
+    head.innerHTML = "<tr>" + active[0].rows[0].data.map(h => `<th>${h}</th>`).join('') + "<th>Comments & Actions</th></tr>";
     
     active.forEach(file => {
         file.rows.forEach((rowObj, rIdx) => {
@@ -199,70 +187,138 @@ function updateActionCellUI(cell, rowObj) {
         <input type="text" class="comm-input" style="display:${hasComm ? 'none' : 'block'}" value="${rowObj.comment}">
         <div style="margin-top:5px; display:flex; gap:3px; justify-content:center;">
             <button style="background:var(--success); color:white; display:${hasComm ? 'none' : 'inline-flex'}" onclick="saveAndSync(this)">Save</button>
-            <button style="background:var(--danger); color:white" onclick="clearComm(this)">Delete</button>
+            <button style="background:var(--info); color:white" onclick="toggleLock(this)">${rowObj.locked ? '🔓' : '🔒'}</button>
+            <button style="background:var(--warning); color:black; display:${(hasComm && !rowObj.locked) ? 'inline-flex' : 'none'}" onclick="editComm(this)">Edit</button>
+            <button style="background:var(--danger); color:white" ${rowObj.locked ? 'disabled' : ''} onclick="clearComm(this)">Delete</button>
         </div>
     `;
 }
 
+// THIS FUNCTION NOW SENDS THE ENTIRE ROW DATA
 async function saveAndSync(btn) {
     let tr = btn.closest('tr');
     let f = allUploadedData.find(f => f.id === tr.getAttribute('data-file-id'));
-    let rowObj = f.rows[tr.getAttribute('data-row-index')];
+    let rowIdx = tr.getAttribute('data-row-index');
+    let rowObj = f.rows[rowIdx];
+    
+    // 1. Get the new comment from the input field
     rowObj.comment = tr.querySelector('.comm-input').value;
     
-    saveToLocal(); // Update local storage with comment
+    // 2. Prepare the FULL ROW DATA (all columns)
+    let fullRowText = rowObj.data.join(" | ");
+
     btn.innerText = "Syncing...";
+    btn.disabled = true;
+
+    try {
+        await fetch(scriptURL, {
+            method: 'POST',
+            mode: 'no-cors',
+            body: JSON.stringify({
+                fileName: f.name,
+                rowData: fullRowText, // This contains the WHOLE row now
+                comment: rowObj.comment
+            })
+        });
+    } catch(e) { console.error(e); }
     
-    await syncToGoogle({
-        fileName: f.name,
-        rowData: rowObj.data.join(" | "),
-        comment: rowObj.comment
-    });
-    
     renderAll();
 }
 
-function clearComm(btn) {
-    if(!confirm("Are you sure? This deletes from screen.")) return;
-    let tr = btn.closest('tr');
-    let fileId = tr.getAttribute('data-file-id');
-    let rowIdx = tr.getAttribute('data-row-index');
-    let f = allUploadedData.find(f => f.id === fileId);
-    f.rows.splice(rowIdx, 1); // Delete the row from data
-    saveToLocal();
+function handleSearchKey(e) { if (e.key === "Enter") { e.preventDefault(); navSearch(1); } }
+function initSearch() {
+    let val = document.getElementById("searchInput").value.toLowerCase();
+    let rows = Array.from(document.getElementById("tableBody").rows);
+    rows.forEach(r => r.classList.remove('highlight-row'));
+    if(!val) { searchMatches = []; currentSearchIdx = -1; document.getElementById("searchCount").innerText = "0/0"; return; }
+    searchMatches = rows.filter(r => r.textContent.toLowerCase().includes(val));
+    currentSearchIdx = searchMatches.length > 0 ? 0 : -1;
+    updateSearchDisplay();
+}
+function navSearch(dir) {
+    if(searchMatches.length === 0) return;
+    searchMatches[currentSearchIdx].classList.remove('highlight-row');
+    currentSearchIdx = (currentSearchIdx + dir + searchMatches.length) % searchMatches.length;
+    updateSearchDisplay();
+}
+function updateSearchDisplay() {
+    if(currentSearchIdx !== -1) {
+        let t = searchMatches[currentSearchIdx];
+        t.classList.add('highlight-row');
+        t.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        document.getElementById("searchCount").innerText = `${currentSearchIdx + 1}/${searchMatches.length}`;
+    }
+}
+
+function togglePanel(id) { 
+    let p = document.getElementById(id); 
+    p.style.display = (p.style.display === "block") ? "none" : "block"; 
+    if(p.style.display==="block") window.scrollTo({top:0, behavior:'smooth'}); 
+}
+function toggleLock(btn) { 
+    let tr = btn.closest('tr'); 
+    let f = allUploadedData.find(f => f.id === tr.getAttribute('data-file-id')); 
+    let r = f.rows[tr.getAttribute('data-row-index')]; 
+    r.locked = !r.locked; 
+    renderAll();
+}
+function editComm(btn) { 
+    let tr = btn.closest('tr'); 
+    tr.querySelector('.comm-text').style.display="none"; 
+    tr.querySelector('.comm-input').style.display="block"; 
+    tr.querySelector('button').style.display="inline-flex"; 
+    btn.style.display="none"; 
+}
+function clearComm(btn) { 
+    if(!confirm("Clear comment?")) return; 
+    let tr = btn.closest('tr'); 
+    let f = allUploadedData.find(f => f.id === tr.getAttribute('data-file-id')); 
+    let r = f.rows[tr.getAttribute('data-row-index')]; 
+    r.comment=""; 
     renderAll();
 }
 
-function moveToBin(id) {
-    if(!confirm("Archive this file?")) return;
-    let f = allUploadedData.find(f => f.id === id);
-    f.active = false;
-    saveToLocal();
-    document.getElementById("hist_" + id).remove();
-    renderAll();
+function executeExport(type) {
+    const from = document.getElementById('exportFrom').value;
+    const to = document.getElementById('exportTo').value;
+    if(!from || !to) return alert("Select range");
+    const active = allUploadedData.filter(f => f.active && f.date >= from && f.date <= to);
+    if(active.length === 0) return alert("No data");
+    let headers = [[...active[0].rows[0].data, "Comments"]];
+    let body = [];
+    active.forEach(file => file.rows.forEach((r, i) => { if(i > 0) body.push([...r.data, r.comment]); }));
+
+    if(type === 'print') { hideAllModals(); window.print(); } 
+    else if(type === 'excel') {
+        let ws = XLSX.utils.aoa_to_sheet([...headers, ...body]);
+        let wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Data");
+        XLSX.writeFile(wb, `Report_${from}.xlsx`);
+        hideAllModals();
+    } else if(type === 'pdf') {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'l', unit: 'mm', format: 'a4' });
+        doc.autoTable({ 
+            head: headers, 
+            body: body, 
+            theme: 'grid', 
+            styles: { fontSize: 8, font: "helvetica" },
+            headStyles: { fillColor: [52, 58, 64] }
+        });
+        doc.save(`Searchable_Report_${from}.pdf`);
+        hideAllModals();
+    }
 }
 
-// --- REST OF UTILS (Search, Export, Clean) ---
-function strictClean(rows) {
-    let nonEmpty = rows.filter(r => r.some(c => c !== null && c.toString().trim() !== ""));
-    let maxCols = Math.max(...nonEmpty.map(r => r.length));
-    let valid = [];
-    for (let c = 0; c < maxCols; c++) { if (nonEmpty.some(r => r[c] !== "" && r[c] !== null)) valid.push(c); }
-    return nonEmpty.map(r => valid.map(idx => r[idx] || ""));
-}
 function addToHistoryUI(id, name, date) {
     let row = document.getElementById("historyBody").insertRow();
     row.id = "hist_" + id;
     row.innerHTML = `<td>${date}</td><td>${name}</td><td><button style="background:var(--danger); color:white" onclick="moveToBin('${id}')">Archive</button></td>`;
 }
-function togglePanel(id) { let p = document.getElementById(id); p.style.display = (p.style.display === "block") ? "none" : "block"; }
-function initSearch() {
-    let val = document.getElementById("searchInput").value.toLowerCase();
-    let rows = Array.from(document.getElementById("tableBody").rows);
-    rows.forEach(r => {
-        let match = r.textContent.toLowerCase().includes(val);
-        r.style.display = match ? "" : "none";
-    });
+function moveToBin(id) {
+    allUploadedData.find(f => f.id === id).active = false;
+    document.getElementById("hist_" + id).remove();
+    renderAll();
 }
 </script>
 </body>
