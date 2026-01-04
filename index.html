@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Transaction Manager - Permanent Database</title>
+    <title>Transaction Manager - Persistent & Auto-Sync</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
@@ -22,7 +22,7 @@
         }
 
         .content-area { padding: 25px; }
-        button { padding: 9px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 13px; display: inline-flex; align-items: center; gap: 5px; }
+        button { padding: 9px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 13px; display: inline-flex; align-items: center; gap: 5px; transition: 0.2s; }
         
         .counter-badge { background: #e2e8f0; padding: 8px 12px; border-radius: 6px; font-weight: bold; font-size: 13px; color: var(--dark); border: 1px solid #cbd5e0; }
 
@@ -32,7 +32,9 @@
             min-width: 150px; box-shadow: 0px 8px 16px rgba(0,0,0,0.2);
             z-index: 1001; border-radius: 6px; margin-top: 5px; overflow: hidden;
         }
-        .dropdown-content button { width: 100%; border-radius: 0; padding: 10px 15px; background: white; color: #333; justify-content: flex-start; }
+        .dropdown-content button {
+            width: 100%; border-radius: 0; padding: 10px 15px; background: white; color: #333; justify-content: flex-start;
+        }
         .dropdown-content button:hover { background-color: #f1f5f9; }
         .show { display: block; }
 
@@ -40,13 +42,17 @@
         th, td { padding: 12px; text-align: center; border: 1px solid #ddd; }
         th { background-color: #f1f5f9; color: #4a5568; text-transform: uppercase; font-size: 11px; }
         
+        .highlight-row { background-color: #fff3cd !important; outline: 2px solid var(--warning); }
+
         .search-container { margin-left: auto; display: flex; align-items: center; gap: 8px; background: #f1f5f9; padding: 5px 15px; border-radius: 8px; border: 1px solid #ddd; }
+        #searchCount { font-size: 12px; font-weight: bold; color: #4a5568; min-width: 50px; text-align: center; }
+
+        .comm-input { padding: 8px; border: 1px solid #ced4da; border-radius: 4px; width: 180px; }
+        .comm-text { font-weight: 600; color: #2d3748; }
         
         .panel { display: none; margin-bottom: 25px; border: 1px solid #ddd; padding: 20px; border-radius: 10px; background: white; }
         .modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border-radius: 12px; z-index: 1100; width: 320px; }
         .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 1050; }
-
-        .comm-input { padding: 8px; border: 1px solid #ced4da; border-radius: 4px; width: 180px; }
     </style>
 </head>
 
@@ -55,40 +61,43 @@
 <div class="sticky-header">
     <button style="background:var(--primary); color:white" onclick="showModal('uploadModal')">➕ Upload</button>
     <button style="background:var(--purple); color:white" onclick="togglePanel('historySection')">📋 History</button>
-    <button style="background:var(--danger); color:white" onclick="clearAllData()">🧹 Clear Screen</button>
-    <div class="counter-badge">Active Records: <span id="totalDataCount">0</span></div>
+    <button style="background:var(--warning); color:black" onclick="togglePanel('recycleBinSection')">🗑️ Bin</button>
+    <div class="counter-badge">Total Records: <span id="totalDataCount">0</span></div>
 
     <div class="dropdown">
         <button style="background:var(--dark); color:white" onclick="toggleDropdown()">📥 Download ▼</button>
         <div id="downloadDropdown" class="dropdown-content">
             <button onclick="showExportModal('excel')">📄 Excel File</button>
             <button onclick="showExportModal('pdf')">📕 Searchable PDF</button>
+            <button onclick="showExportModal('print')">🖨️ Print View</button>
         </div>
     </div>
     
     <div class="search-container">
-        <input type="text" id="searchInput" oninput="initSearch()" placeholder="🔍 Search database...">
+        <input type="text" id="searchInput" oninput="initSearch()" placeholder="🔍 Search...">
+        <span id="searchCount">0/0</span>
     </div>
 </div>
 
 <div class="content-area">
-    <div id="historySection" class="panel"><h3>File Upload History</h3><table id="historyTable"><thead><tr><th>Date</th><th>File Name</th><th>Action</th></tr></thead><tbody id="historyBody"></tbody></table></div>
+    <div id="historySection" class="panel"><h3>Active History</h3><table id="historyTable"><thead><tr><th>Date</th><th>File Name</th><th>Action</th></tr></thead><tbody id="historyBody"></tbody></table></div>
+    <div id="recycleBinSection" class="panel"><h3>Recycle Bin</h3><table id="binTable"><thead><tr><th>Date</th><th>File Name</th><th>Action</th></tr></thead><tbody id="binBody"></tbody></table></div>
     <table id="mainDataTable"><thead id="tableHead"></thead><tbody id="tableBody"></tbody></table>
 </div>
 
 <div class="overlay" id="overlay" onclick="hideAllModals()"></div>
 
 <div class="modal" id="uploadModal">
-    <h3>Upload Excel</h3>
+    <h3>Upload Data</h3>
     <input type="date" id="uploadDate" style="padding:10px; width:100%; margin-bottom:15px; border:1px solid #ddd;">
     <button style="background:var(--success); color:white; width:100%" onclick="triggerFileInput()">Confirm & Open</button>
 </div>
 
 <div class="modal" id="exportModal">
-    <h3>Export Options</h3>
+    <h3>Export Range</h3>
     <input type="date" id="exportFrom" style="width:100%; margin-bottom:10px;">
     <input type="date" id="exportTo" style="width:100%; margin-bottom:20px;">
-    <button id="confirmExportBtn" style="background:var(--success); color:white; width:100%">Download</button>
+    <button id="confirmExportBtn" style="background:var(--success); color:white; width:100%">Process Export</button>
 </div>
 
 <input type="file" id="fileInput" accept=".xlsx, .xls" hidden>
@@ -98,34 +107,29 @@ const scriptURL = 'https://script.google.com/macros/s/AKfycbxskq3zkvUKMsyUJ7TB8G
 
 let allUploadedData = []; 
 
-// --- DATABASE LOGIC: LOAD ON START ---
+// --- 1. LOAD DATA ON REFRESH ---
 window.onload = function() {
-    const savedData = localStorage.getItem('myPermanentDB');
-    if (savedData) {
-        allUploadedData = JSON.parse(savedData);
+    const saved = localStorage.getItem('transactionData');
+    if (saved) {
+        allUploadedData = JSON.parse(saved);
         renderAll();
-        // Rebuild history list
+        // Refresh history UI
         allUploadedData.forEach(f => {
             if(f.active) addToHistoryUI(f.id, f.name, f.date);
         });
     }
 };
 
-// --- DATABASE LOGIC: SAVE ON CHANGE ---
-function syncDatabase() {
-    localStorage.setItem('myPermanentDB', JSON.stringify(allUploadedData));
+// --- 2. SAVE DATA TO LOCAL STORAGE ---
+function saveToLocal() {
+    localStorage.setItem('transactionData', JSON.stringify(allUploadedData));
 }
 
+function toggleDropdown() { document.getElementById("downloadDropdown").classList.toggle("show"); }
 function showModal(id) { document.getElementById(id).style.display = 'block'; document.getElementById('overlay').style.display = 'block'; }
 function hideAllModals() { document.querySelectorAll('.modal').forEach(m => m.style.display = 'none'); document.getElementById('overlay').style.display = 'none'; }
-function toggleDropdown() { document.getElementById("downloadDropdown").classList.toggle("show"); }
-function togglePanel(id) { let p = document.getElementById(id); p.style.display = (p.style.display === "block") ? "none" : "block"; }
-
-function triggerFileInput() {
-    if(!document.getElementById('uploadDate').value) return alert("Please select a date first!");
-    document.getElementById('fileInput').click();
-    hideAllModals();
-}
+function showExportModal(t) { showModal('exportModal'); document.getElementById('confirmExportBtn').onclick = () => executeExport(t); }
+function triggerFileInput() { if(!document.getElementById('uploadDate').value) return alert("Select date!"); document.getElementById('fileInput').click(); hideAllModals(); }
 
 document.getElementById("fileInput").addEventListener("change", function (e) {
     let file = e.target.files[0];
@@ -134,116 +138,130 @@ document.getElementById("fileInput").addEventListener("change", function (e) {
     reader.onload = function (e) {
         let workbook = XLSX.read(new Uint8Array(e.target.result), { type: "array" });
         let rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: "" });
+        let cleaned = strictClean(rawRows);
+        let fileId = "file_" + Date.now(); // Unique ID using timestamp
+        let dataRows = cleaned.map(r => ({ data: r, comment: "", locked: false }));
         
-        let cleaned = rawRows.filter(r => r.some(c => c !== ""));
-        let fileId = "ID_" + Date.now();
-        let dataRows = cleaned.map(r => ({ data: Object.values(r), comment: "" }));
+        let newFile = { id: fileId, name: file.name, date: document.getElementById('uploadDate').value, rows: dataRows, active: true };
+        allUploadedData.push(newFile);
         
-        let newEntry = { id: fileId, name: file.name, date: document.getElementById('uploadDate').value, rows: dataRows, active: true };
-        allUploadedData.push(newEntry);
-        
-        syncDatabase(); // Save to permanent local storage
+        saveToLocal(); // Persistent save
         renderAll();
-        addToHistoryUI(fileId, file.name, newEntry.date);
+        addToHistoryUI(fileId, file.name, newFile.date);
 
-        // AUTO-SYNC TO GOOGLE SHEETS IMMEDIATELY
-        dataRows.forEach((row, idx) => {
-            if(idx > 0) syncToGoogle(file.name, row.data.join(" | "), "New Upload");
+        // --- 3. AUTO-SYNC FULL DATA TO GOOGLE ON UPLOAD ---
+        dataRows.forEach((row, index) => {
+            if(index > 0) { // Skip header
+                syncToGoogle({
+                    fileName: file.name,
+                    rowData: row.data.join(" | "),
+                    comment: "AUTO-SYNC ON UPLOAD"
+                });
+            }
         });
     };
     reader.readAsArrayBuffer(file);
 });
 
-async function syncToGoogle(file, row, comm) {
+async function syncToGoogle(payload) {
     try {
-        await fetch(scriptURL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ fileName: file, rowData: row, comment: comm }) });
-    } catch(e) { console.log("Google Sync Pending..."); }
+        await fetch(scriptURL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+    } catch(e) { console.error("Sync fail", e); }
 }
 
 function renderAll() {
     let body = document.getElementById("tableBody");
     let head = document.getElementById("tableHead");
     body.innerHTML = "";
-    let activeFiles = allUploadedData.filter(f => f.active);
-    
-    let totalRows = 0;
-    activeFiles.forEach(f => totalRows += (f.rows.length - 1));
-    document.getElementById("totalDataCount").innerText = totalRows;
+    let active = allUploadedData.filter(f => f.active);
+    document.getElementById("totalDataCount").innerText = active.reduce((acc, f) => acc + (f.rows.length - 1), 0);
 
-    if (activeFiles.length === 0) { head.innerHTML = ""; return; }
+    if (active.length === 0) { head.innerHTML = ""; return; }
+    head.innerHTML = "<tr>" + active[0].rows[0].data.map(h => `<th>${h}</th>`).join('') + "<th>Action</th></tr>";
     
-    // Set Header based on first file
-    head.innerHTML = "<tr>" + activeFiles[0].rows[0].data.map(h => `<th>${h}</th>`).join('') + "<th>Action</th></tr>";
-    
-    activeFiles.forEach(file => {
+    active.forEach(file => {
         file.rows.forEach((rowObj, rIdx) => {
-            if(rIdx === 0) return; // Skip headers inside file
+            if(rIdx === 0) return;
             let tr = body.insertRow();
             tr.setAttribute("data-file-id", file.id);
             tr.setAttribute("data-row-index", rIdx);
             rowObj.data.forEach(cell => { tr.insertCell().innerText = cell; });
-            
             let actionCell = tr.insertCell();
-            let hasComm = rowObj.comment !== "";
-            actionCell.innerHTML = `
-                <div class="comm-text">${rowObj.comment}</div>
-                <input type="text" class="comm-input" style="display:${hasComm ? 'none' : 'block'}" placeholder="Add comment...">
-                <button style="background:var(--success); color:white; margin-top:5px;" onclick="saveRow(this)">Save</button>
-                <button style="background:var(--danger); color:white" onclick="deleteRow(this)">Delete</button>
-            `;
+            updateActionCellUI(actionCell, rowObj);
         });
     });
 }
 
-async function saveRow(btn) {
+function updateActionCellUI(cell, rowObj) {
+    let hasComm = rowObj.comment !== "";
+    cell.innerHTML = `
+        <div class="comm-text" style="display:${hasComm ? 'block' : 'none'}">${rowObj.comment}</div>
+        <input type="text" class="comm-input" style="display:${hasComm ? 'none' : 'block'}" value="${rowObj.comment}">
+        <div style="margin-top:5px; display:flex; gap:3px; justify-content:center;">
+            <button style="background:var(--success); color:white; display:${hasComm ? 'none' : 'inline-flex'}" onclick="saveAndSync(this)">Save</button>
+            <button style="background:var(--danger); color:white" onclick="clearComm(this)">Delete</button>
+        </div>
+    `;
+}
+
+async function saveAndSync(btn) {
     let tr = btn.closest('tr');
     let f = allUploadedData.find(f => f.id === tr.getAttribute('data-file-id'));
     let rowObj = f.rows[tr.getAttribute('data-row-index')];
+    rowObj.comment = tr.querySelector('.comm-input').value;
     
-    let input = tr.querySelector('.comm-input');
-    rowObj.comment = input.value || rowObj.comment;
-    
-    syncDatabase(); // Save to permanent local storage
+    saveToLocal(); // Update local storage with comment
     btn.innerText = "Syncing...";
     
-    await syncToGoogle(f.name, rowObj.data.join(" | "), rowObj.comment);
+    await syncToGoogle({
+        fileName: f.name,
+        rowData: rowObj.data.join(" | "),
+        comment: rowObj.comment
+    });
+    
     renderAll();
 }
 
-function deleteRow(btn) {
-    if(!confirm("Delete this row forever?")) return;
+function clearComm(btn) {
+    if(!confirm("Are you sure? This deletes from screen.")) return;
     let tr = btn.closest('tr');
-    let f = allUploadedData.find(f => f.id === tr.getAttribute('data-file-id'));
-    f.rows.splice(tr.getAttribute('data-row-index'), 1);
-    syncDatabase();
+    let fileId = tr.getAttribute('data-file-id');
+    let rowIdx = tr.getAttribute('data-row-index');
+    let f = allUploadedData.find(f => f.id === fileId);
+    f.rows.splice(rowIdx, 1); // Delete the row from data
+    saveToLocal();
     renderAll();
 }
 
-function clearAllData() {
-    if(confirm("This will wipe the website screen. Your Google Sheet will remain safe. Proceed?")) {
-        allUploadedData = [];
-        localStorage.removeItem('myPermanentDB');
-        location.reload();
-    }
+function moveToBin(id) {
+    if(!confirm("Archive this file?")) return;
+    let f = allUploadedData.find(f => f.id === id);
+    f.active = false;
+    saveToLocal();
+    document.getElementById("hist_" + id).remove();
+    renderAll();
 }
 
+// --- REST OF UTILS (Search, Export, Clean) ---
+function strictClean(rows) {
+    let nonEmpty = rows.filter(r => r.some(c => c !== null && c.toString().trim() !== ""));
+    let maxCols = Math.max(...nonEmpty.map(r => r.length));
+    let valid = [];
+    for (let c = 0; c < maxCols; c++) { if (nonEmpty.some(r => r[c] !== "" && r[c] !== null)) valid.push(c); }
+    return nonEmpty.map(r => valid.map(idx => r[idx] || ""));
+}
 function addToHistoryUI(id, name, date) {
     let row = document.getElementById("historyBody").insertRow();
     row.id = "hist_" + id;
-    row.innerHTML = `<td>${date}</td><td>${name}</td><td><button style="background:var(--danger); color:white" onclick="removeFile('${id}')">Remove File</button></td>`;
+    row.innerHTML = `<td>${date}</td><td>${name}</td><td><button style="background:var(--danger); color:white" onclick="moveToBin('${id}')">Archive</button></td>`;
 }
-
-function removeFile(id) {
-    allUploadedData = allUploadedData.filter(f => f.id !== id);
-    syncDatabase();
-    location.reload();
-}
-
+function togglePanel(id) { let p = document.getElementById(id); p.style.display = (p.style.display === "block") ? "none" : "block"; }
 function initSearch() {
     let val = document.getElementById("searchInput").value.toLowerCase();
-    let rows = document.querySelectorAll("#tableBody tr");
+    let rows = Array.from(document.getElementById("tableBody").rows);
     rows.forEach(r => {
-        r.style.display = r.textContent.toLowerCase().includes(val) ? "" : "none";
+        let match = r.textContent.toLowerCase().includes(val);
+        r.style.display = match ? "" : "none";
     });
 }
 </script>
