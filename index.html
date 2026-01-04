@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Transaction Manager - Permanent Database</title>
+    <title>Transaction Manager - Fixed Exports</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
@@ -33,9 +33,7 @@
             min-width: 150px; box-shadow: 0px 8px 16px rgba(0,0,0,0.2);
             z-index: 1001; border-radius: 6px; margin-top: 5px; overflow: hidden;
         }
-        .dropdown-content button {
-            width: 100%; border-radius: 0; padding: 10px 15px; background: white; color: #333; justify-content: flex-start;
-        }
+        .dropdown-content button { width: 100%; border-radius: 0; padding: 10px 15px; background: white; color: #333; justify-content: flex-start; }
         .dropdown-content button:hover { background-color: #f1f5f9; }
         .show { display: block; }
 
@@ -56,9 +54,9 @@
         .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 1050; }
 
         @media print {
-            .sticky-header, .panel, .btn-group, button, input { display: none !important; }
-            table { width: 100%; border: 1px solid black !important; }
-            th, td { border: 1px solid black !important; color: black; }
+            .sticky-header, .panel, button, input, .search-container { display: none !important; }
+            table { width: 100%; border: 1px solid black !important; font-size: 10px; }
+            th, td { border: 1px solid black !important; }
         }
     </style>
 </head>
@@ -105,8 +103,8 @@
 
 <div class="modal" id="exportModal">
     <h3 id="exportModalTitle">Export Range</h3>
-    <label>FROM</label><input type="date" id="exportFrom" style="padding:10px; width:100%; margin-bottom:10px;">
-    <label>TO</label><input type="date" id="exportTo" style="padding:10px; width:100%; margin-bottom:20px;">
+    <label>FROM</label><input type="date" id="exportFrom" style="padding:10px; width:100%; margin-bottom:10px; border:1px solid #ddd; width:90%">
+    <label>TO</label><input type="date" id="exportTo" style="padding:10px; width:100%; margin-bottom:20px; border:1px solid #ddd; width:90%">
     <button id="confirmExportBtn" style="background:var(--success); color:white; width:100%">Process Export</button>
 </div>
 
@@ -119,13 +117,11 @@ let allUploadedData = [];
 let searchMatches = [];
 let currentSearchIdx = -1;
 
-// --- 1. LOAD DATA ON REFRESH ---
 window.onload = function() {
     const saved = localStorage.getItem('transaction_db');
     if (saved) {
         allUploadedData = JSON.parse(saved);
         renderAll();
-        // Refresh History UI
         allUploadedData.forEach(f => {
             if(f.active) addToHistoryUI(f.id, f.name, f.date);
             else addToBinUI(f.id, f.name, f.date);
@@ -133,17 +129,10 @@ window.onload = function() {
     }
 };
 
-// --- 2. SAVE TO LOCAL STORAGE FUNCTION ---
-function persistData() {
-    localStorage.setItem('transaction_db', JSON.stringify(allUploadedData));
-}
-
-function toggleDropdown() { document.getElementById("downloadDropdown").classList.toggle("show"); }
-window.onclick = function(e) { if (!e.target.matches('.dropdown button')) { var ds = document.getElementsByClassName("dropdown-content"); for (var i=0; i<ds.length; i++) ds[i].classList.remove('show'); } }
-
+function persistData() { localStorage.setItem('transaction_db', JSON.stringify(allUploadedData)); }
 function showModal(id) { document.getElementById(id).style.display = 'block'; document.getElementById('overlay').style.display = 'block'; }
 function hideAllModals() { document.querySelectorAll('.modal').forEach(m => m.style.display = 'none'); document.getElementById('overlay').style.display = 'none'; }
-function showExportModal(t) { document.getElementById('exportModalTitle').innerText = `Export ${t.toUpperCase()}`; showModal('exportModal'); document.getElementById('confirmExportBtn').onclick = () => executeExport(t); }
+function toggleDropdown() { document.getElementById("downloadDropdown").classList.toggle("show"); }
 
 function triggerFileInput() { if(!document.getElementById('uploadDate').value) return alert("Select date!"); document.getElementById('fileInput').click(); hideAllModals(); }
 
@@ -155,15 +144,11 @@ document.getElementById("fileInput").addEventListener("change", function (e) {
         let workbook = XLSX.read(new Uint8Array(e.target.result), { type: "array" });
         let rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: "" });
         let cleaned = strictClean(rawRows);
-        let fileId = "file_" + Date.now(); // Unique ID using timestamp
-        let uploadDate = document.getElementById('uploadDate').value;
-
+        let fileId = "file_" + Date.now();
         let dataRows = cleaned.map(r => ({ data: r, comment: "", locked: false }));
-        allUploadedData.push({ id: fileId, name: file.name, date: uploadDate, rows: dataRows, active: true });
-        
-        persistData();
-        renderAll();
-        addToHistoryUI(fileId, file.name, uploadDate);
+        allUploadedData.push({ id: fileId, name: file.name, date: document.getElementById('uploadDate').value, rows: dataRows, active: true });
+        persistData(); renderAll();
+        addToHistoryUI(fileId, file.name, document.getElementById('uploadDate').value);
     };
     reader.readAsArrayBuffer(file);
 });
@@ -181,14 +166,9 @@ function renderAll() {
     let head = document.getElementById("tableHead");
     body.innerHTML = "";
     let active = allUploadedData.filter(f => f.active);
-    
-    let count = 0;
-    active.forEach(f => count += (f.rows.length - 1));
-    document.getElementById("totalDataCount").innerText = count;
-
+    document.getElementById("totalDataCount").innerText = active.reduce((acc, f) => acc + (f.rows.length - 1), 0);
     if (active.length === 0) { head.innerHTML = ""; return; }
     head.innerHTML = "<tr>" + active[0].rows[0].data.map(h => `<th>${h}</th>`).join('') + "<th>Comments & Actions</th></tr>";
-    
     active.forEach(file => {
         file.rows.forEach((rowObj, rIdx) => {
             if(rIdx === 0) return;
@@ -211,40 +191,24 @@ function updateActionCellUI(cell, rowObj) {
             <button style="background:var(--success); color:white; display:${hasComm ? 'none' : 'inline-flex'}" onclick="saveAndSync(this)">Save</button>
             <button style="background:var(--info); color:white" onclick="toggleLock(this)">${rowObj.locked ? '🔓' : '🔒'}</button>
             <button style="background:var(--warning); color:black; display:${(hasComm && !rowObj.locked) ? 'inline-flex' : 'none'}" onclick="editComm(this)">Edit</button>
-            <button style="background:var(--danger); color:white" ${rowObj.locked ? 'disabled' : ''} onclick="clearComm(this)">Delete Row</button>
+            <button style="background:var(--danger); color:white" ${rowObj.locked ? 'disabled' : ''} onclick="clearComm(this)">Delete Comment</button>
         </div>
     `;
 }
 
 async function saveAndSync(btn) {
     let tr = btn.closest('tr');
-    let fileId = tr.getAttribute('data-file-id');
-    let rowIdx = tr.getAttribute('data-row-index');
-    let f = allUploadedData.find(f => f.id === fileId);
-    let rowObj = f.rows[rowIdx];
-    
+    let f = allUploadedData.find(f => f.id === tr.getAttribute('data-file-id'));
+    let rowObj = f.rows[tr.getAttribute('data-row-index')];
     rowObj.comment = tr.querySelector('.comm-input').value;
-    persistData(); // Save to permanent memory
-
+    persistData();
     btn.innerText = "Syncing...";
-    btn.disabled = true;
-
     try {
-        await fetch(scriptURL, {
-            method: 'POST',
-            mode: 'no-cors',
-            body: JSON.stringify({
-                fileName: f.name,
-                rowData: rowObj.data.join(" | "), 
-                comment: rowObj.comment
-            })
-        });
+        await fetch(scriptURL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ fileName: f.name, rowData: rowObj.data.join(" | "), comment: rowObj.comment }) });
     } catch(e) { console.error(e); }
-    
     renderAll();
 }
 
-// SEARCH AND UI UTILS
 function handleSearchKey(e) { if (e.key === "Enter") { e.preventDefault(); navSearch(1); } }
 function initSearch() {
     let val = document.getElementById("searchInput").value.toLowerCase();
@@ -270,17 +234,12 @@ function updateSearchDisplay() {
     }
 }
 
-function togglePanel(id) { 
-    let p = document.getElementById(id); 
-    p.style.display = (p.style.display === "block") ? "none" : "block"; 
-}
+function togglePanel(id) { let p = document.getElementById(id); p.style.display = (p.style.display === "block") ? "none" : "block"; }
 function toggleLock(btn) { 
     let tr = btn.closest('tr'); 
     let f = allUploadedData.find(f => f.id === tr.getAttribute('data-file-id')); 
     let r = f.rows[tr.getAttribute('data-row-index')]; 
-    r.locked = !r.locked; 
-    persistData();
-    renderAll();
+    r.locked = !r.locked; persistData(); renderAll();
 }
 function editComm(btn) { 
     let tr = btn.closest('tr'); 
@@ -290,42 +249,47 @@ function editComm(btn) {
     btn.style.display="none"; 
 }
 function clearComm(btn) { 
-    if(!confirm("Delete this row from screen?")) return; 
+    if(!confirm("Clear this comment?")) return; 
     let tr = btn.closest('tr'); 
     let f = allUploadedData.find(f => f.id === tr.getAttribute('data-file-id')); 
-    f.rows.splice(tr.getAttribute('data-row-index'), 1);
-    persistData();
-    renderAll();
+    f.rows[tr.getAttribute('data-row-index')].comment = ""; 
+    persistData(); renderAll();
+}
+
+// --- FIXED EXPORT FUNCTIONS ---
+function showExportModal(t) { 
+    document.getElementById('exportModalTitle').innerText = `Export ${t.toUpperCase()}`; 
+    showModal('exportModal'); 
+    document.getElementById('confirmExportBtn').onclick = () => executeExport(t); 
 }
 
 function executeExport(type) {
     const from = document.getElementById('exportFrom').value;
     const to = document.getElementById('exportTo').value;
-    if(!from || !to) return alert("Select range");
-    const active = allUploadedData.filter(f => f.active && f.date >= from && f.date <= to);
-    if(active.length === 0) return alert("No data");
-    let headers = [[...active[0].rows[0].data, "Comments"]];
+    
+    if(type !== 'print' && (!from || !to)) return alert("Please select a date range!");
+    
+    const active = allUploadedData.filter(f => f.active && (type === 'print' || (f.date >= from && f.date <= to)));
+    if(active.length === 0) return alert("No data found for this range!");
+
+    let headers = [[...active[0].rows[0].data, "Comment"]];
     let body = [];
-    active.forEach(file => file.rows.forEach((r, i) => { if(i > 0) body.push([...r.data, r.comment]); }));
+    active.forEach(file => {
+        file.rows.forEach((r, i) => { if(i > 0) body.push([...r.data, r.comment]); });
+    });
 
     if(type === 'print') { hideAllModals(); window.print(); } 
     else if(type === 'excel') {
         let ws = XLSX.utils.aoa_to_sheet([...headers, ...body]);
         let wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Data");
-        XLSX.writeFile(wb, `Report_${from}.xlsx`);
+        XLSX.utils.book_append_sheet(wb, ws, "Records");
+        XLSX.writeFile(wb, `Data_Export_${from}_to_${to}.xlsx`);
         hideAllModals();
     } else if(type === 'pdf') {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({ orientation: 'l', unit: 'mm', format: 'a4' });
-        doc.autoTable({ 
-            head: headers, 
-            body: body, 
-            theme: 'grid', 
-            styles: { fontSize: 8, font: "helvetica" },
-            headStyles: { fillColor: [52, 58, 64] }
-        });
-        doc.save(`Report_${from}.pdf`);
+        doc.autoTable({ head: headers, body: body, theme: 'grid', styles: { fontSize: 7 } });
+        doc.save(`Data_Export_${from}_to_${to}.pdf`);
         hideAllModals();
     }
 }
@@ -333,7 +297,7 @@ function executeExport(type) {
 function addToHistoryUI(id, name, date) {
     let row = document.getElementById("historyBody").insertRow();
     row.id = "hist_" + id;
-    row.innerHTML = `<td>${date}</td><td>${name}</td><td><button style="background:var(--danger); color:white" onclick="moveToBin('${id}')">Archive File</button></td>`;
+    row.innerHTML = `<td>${date}</td><td>${name}</td><td><button style="background:var(--danger); color:white" onclick="moveToBin('${id}')">Archive</button></td>`;
 }
 function addToBinUI(id, name, date) {
     let row = document.getElementById("binBody").insertRow();
@@ -342,20 +306,17 @@ function addToBinUI(id, name, date) {
 }
 function moveToBin(id) {
     let f = allUploadedData.find(f => f.id === id);
-    f.active = false;
-    persistData();
+    f.active = false; persistData();
     document.getElementById("hist_" + id).remove();
-    addToBinUI(f.id, f.name, f.date);
-    renderAll();
+    addToBinUI(f.id, f.name, f.date); renderAll();
 }
 function restoreFromFile(id) {
     let f = allUploadedData.find(f => f.id === id);
-    f.active = true;
-    persistData();
+    f.active = true; persistData();
     document.getElementById("bin_" + id).remove();
-    addToHistoryUI(f.id, f.name, f.date);
-    renderAll();
+    addToHistoryUI(f.id, f.name, f.date); renderAll();
 }
 </script>
 </body>
 </html>
+
