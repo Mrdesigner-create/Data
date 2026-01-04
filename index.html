@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Transaction Manager - Full Row Sync</title>
+    <title>Transaction Manager - Permanent Database</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
@@ -116,9 +116,27 @@
 const scriptURL = 'https://script.google.com/macros/s/AKfycbxskq3zkvUKMsyUJ7TB8GoSmIHqnYWQtpNHzgdBXl-Sb_daWezOmiDaOXrm_9IRYgAX/exec';
 
 let allUploadedData = []; 
-let fileCounter = 0;
 let searchMatches = [];
 let currentSearchIdx = -1;
+
+// --- 1. LOAD DATA ON REFRESH ---
+window.onload = function() {
+    const saved = localStorage.getItem('transaction_db');
+    if (saved) {
+        allUploadedData = JSON.parse(saved);
+        renderAll();
+        // Refresh History UI
+        allUploadedData.forEach(f => {
+            if(f.active) addToHistoryUI(f.id, f.name, f.date);
+            else addToBinUI(f.id, f.name, f.date);
+        });
+    }
+};
+
+// --- 2. SAVE TO LOCAL STORAGE FUNCTION ---
+function persistData() {
+    localStorage.setItem('transaction_db', JSON.stringify(allUploadedData));
+}
 
 function toggleDropdown() { document.getElementById("downloadDropdown").classList.toggle("show"); }
 window.onclick = function(e) { if (!e.target.matches('.dropdown button')) { var ds = document.getElementsByClassName("dropdown-content"); for (var i=0; i<ds.length; i++) ds[i].classList.remove('show'); } }
@@ -137,11 +155,15 @@ document.getElementById("fileInput").addEventListener("change", function (e) {
         let workbook = XLSX.read(new Uint8Array(e.target.result), { type: "array" });
         let rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: "" });
         let cleaned = strictClean(rawRows);
-        let fileId = "file_" + (++fileCounter);
+        let fileId = "file_" + Date.now(); // Unique ID using timestamp
+        let uploadDate = document.getElementById('uploadDate').value;
+
         let dataRows = cleaned.map(r => ({ data: r, comment: "", locked: false }));
-        allUploadedData.push({ id: fileId, name: file.name, date: document.getElementById('uploadDate').value, rows: dataRows, active: true });
+        allUploadedData.push({ id: fileId, name: file.name, date: uploadDate, rows: dataRows, active: true });
+        
+        persistData();
         renderAll();
-        addToHistoryUI(fileId, file.name, document.getElementById('uploadDate').value);
+        addToHistoryUI(fileId, file.name, uploadDate);
     };
     reader.readAsArrayBuffer(file);
 });
@@ -189,23 +211,20 @@ function updateActionCellUI(cell, rowObj) {
             <button style="background:var(--success); color:white; display:${hasComm ? 'none' : 'inline-flex'}" onclick="saveAndSync(this)">Save</button>
             <button style="background:var(--info); color:white" onclick="toggleLock(this)">${rowObj.locked ? '🔓' : '🔒'}</button>
             <button style="background:var(--warning); color:black; display:${(hasComm && !rowObj.locked) ? 'inline-flex' : 'none'}" onclick="editComm(this)">Edit</button>
-            <button style="background:var(--danger); color:white" ${rowObj.locked ? 'disabled' : ''} onclick="clearComm(this)">Delete</button>
+            <button style="background:var(--danger); color:white" ${rowObj.locked ? 'disabled' : ''} onclick="clearComm(this)">Delete Row</button>
         </div>
     `;
 }
 
-// THIS FUNCTION NOW SENDS THE ENTIRE ROW DATA
 async function saveAndSync(btn) {
     let tr = btn.closest('tr');
-    let f = allUploadedData.find(f => f.id === tr.getAttribute('data-file-id'));
+    let fileId = tr.getAttribute('data-file-id');
     let rowIdx = tr.getAttribute('data-row-index');
+    let f = allUploadedData.find(f => f.id === fileId);
     let rowObj = f.rows[rowIdx];
     
-    // 1. Get the new comment from the input field
     rowObj.comment = tr.querySelector('.comm-input').value;
-    
-    // 2. Prepare the FULL ROW DATA (all columns)
-    let fullRowText = rowObj.data.join(" | ");
+    persistData(); // Save to permanent memory
 
     btn.innerText = "Syncing...";
     btn.disabled = true;
@@ -216,7 +235,7 @@ async function saveAndSync(btn) {
             mode: 'no-cors',
             body: JSON.stringify({
                 fileName: f.name,
-                rowData: fullRowText, // This contains the WHOLE row now
+                rowData: rowObj.data.join(" | "), 
                 comment: rowObj.comment
             })
         });
@@ -225,6 +244,7 @@ async function saveAndSync(btn) {
     renderAll();
 }
 
+// SEARCH AND UI UTILS
 function handleSearchKey(e) { if (e.key === "Enter") { e.preventDefault(); navSearch(1); } }
 function initSearch() {
     let val = document.getElementById("searchInput").value.toLowerCase();
@@ -253,13 +273,13 @@ function updateSearchDisplay() {
 function togglePanel(id) { 
     let p = document.getElementById(id); 
     p.style.display = (p.style.display === "block") ? "none" : "block"; 
-    if(p.style.display==="block") window.scrollTo({top:0, behavior:'smooth'}); 
 }
 function toggleLock(btn) { 
     let tr = btn.closest('tr'); 
     let f = allUploadedData.find(f => f.id === tr.getAttribute('data-file-id')); 
     let r = f.rows[tr.getAttribute('data-row-index')]; 
     r.locked = !r.locked; 
+    persistData();
     renderAll();
 }
 function editComm(btn) { 
@@ -270,11 +290,11 @@ function editComm(btn) {
     btn.style.display="none"; 
 }
 function clearComm(btn) { 
-    if(!confirm("Clear comment?")) return; 
+    if(!confirm("Delete this row from screen?")) return; 
     let tr = btn.closest('tr'); 
     let f = allUploadedData.find(f => f.id === tr.getAttribute('data-file-id')); 
-    let r = f.rows[tr.getAttribute('data-row-index')]; 
-    r.comment=""; 
+    f.rows.splice(tr.getAttribute('data-row-index'), 1);
+    persistData();
     renderAll();
 }
 
@@ -305,7 +325,7 @@ function executeExport(type) {
             styles: { fontSize: 8, font: "helvetica" },
             headStyles: { fillColor: [52, 58, 64] }
         });
-        doc.save(`Searchable_Report_${from}.pdf`);
+        doc.save(`Report_${from}.pdf`);
         hideAllModals();
     }
 }
@@ -313,11 +333,27 @@ function executeExport(type) {
 function addToHistoryUI(id, name, date) {
     let row = document.getElementById("historyBody").insertRow();
     row.id = "hist_" + id;
-    row.innerHTML = `<td>${date}</td><td>${name}</td><td><button style="background:var(--danger); color:white" onclick="moveToBin('${id}')">Archive</button></td>`;
+    row.innerHTML = `<td>${date}</td><td>${name}</td><td><button style="background:var(--danger); color:white" onclick="moveToBin('${id}')">Archive File</button></td>`;
+}
+function addToBinUI(id, name, date) {
+    let row = document.getElementById("binBody").insertRow();
+    row.id = "bin_" + id;
+    row.innerHTML = `<td>${date}</td><td>${name}</td><td><button style="background:var(--success); color:white" onclick="restoreFromFile('${id}')">Restore</button></td>`;
 }
 function moveToBin(id) {
-    allUploadedData.find(f => f.id === id).active = false;
+    let f = allUploadedData.find(f => f.id === id);
+    f.active = false;
+    persistData();
     document.getElementById("hist_" + id).remove();
+    addToBinUI(f.id, f.name, f.date);
+    renderAll();
+}
+function restoreFromFile(id) {
+    let f = allUploadedData.find(f => f.id === id);
+    f.active = true;
+    persistData();
+    document.getElementById("bin_" + id).remove();
+    addToHistoryUI(f.id, f.name, f.date);
     renderAll();
 }
 </script>
