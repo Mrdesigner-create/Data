@@ -3,251 +3,290 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Transaction Manager </title>
+    <title>Professional Transaction Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
 
     <style>
-        :root { --primary: #007bff; --success: #28a745; --info: #17a2b8; --warning: #ffc107; --danger: #dc3545; --purple: #6f42c1; --dark: #343a40; }
-        body { font-family: 'Segoe UI', sans-serif; margin: 0; background-color: #f8f9fa; overflow-x: auto; }
-        .sticky-header { position: sticky; top: 0; z-index: 1000; background: white; padding: 10px 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-        .content-area { padding: 15px; width: 100%; box-sizing: border-box; }
-        .table-container { width: 100%; overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; background: white; min-width: 800px; border: 1px solid #ddd; }
-        th, td { padding: 10px; text-align: center; border: 1px solid #ddd; font-size: 13px; }
-        th { background-color: #f1f5f9; color: #4a5568; text-transform: uppercase; font-size: 11px; }
-        button { padding: 8px 12px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; color: white; }
-        .counter-badge { background: #e2e8f0; padding: 6px 10px; border-radius: 6px; font-weight: bold; font-size: 12px; color: var(--dark); }
+        :root { --primary: #0f172a; --accent: #2563eb; --success: #16a34a; --danger: #dc2626; --bg: #f8fafc; }
+        body { font-family: 'Inter', sans-serif; margin: 0; background: var(--bg); color: #1e293b; }
+
+        /* PRINT SETTINGS: 100% MATCH TO SCREEN */
+        @media print { 
+            thead { display: table-header-group; }
+            .no-print, button, .search-box, .sticky-header, .panel { display: none !important; } 
+            table { width: 100% !important; table-layout: fixed !important; border-collapse: collapse !important; }
+            th, td { border: 1px solid #334155 !important; font-size: 8pt !important; padding: 6px !important; word-break: break-all !important; color: #000 !important; }
+            th { background: #f1f5f9 !important; }
+        }
+
+        /* DASHBOARD HEADER */
+        .sticky-header { position: sticky; top: 0; z-index: 1000; background: var(--primary); padding: 12px 24px; display: flex; gap: 12px; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        
+        /* SEARCH BAR: CLEAR & VISIBLE */
+        .search-box { margin-left: auto; display: flex; align-items: center; background: #1e293b; border-radius: 8px; border: 1px solid #334155; }
+        .search-box input { border: none; background: transparent; padding: 10px 15px; outline: none; width: 220px; color: #fff; font-size: 14px; }
+        .search-nav-btn { background: #334155; color: #fff; border: none; padding: 10px 16px; cursor: pointer; font-weight: bold; }
+        .search-nav-btn:hover { background: var(--accent); }
+
+        .content-area { padding: 25px; }
+
+        /* TABLE UI: FIXED COLUMN WIDTHS */
+        .table-container { background: #fff; border-radius: 10px; border: 1px solid #e2e8f0; overflow-x: auto; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; min-width: 1400px; table-layout: fixed; }
+        
+        /* Fixed Headers - Match Screen 100% */
+        th { padding: 16px; background: #f1f5f9; font-size: 11px; text-transform: uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; }
+        td { padding: 14px; border-bottom: 1px solid #e2e8f0; text-align: center; font-size: 13px; word-wrap: break-word; vertical-align: middle; }
+        
+        /* Column Width Definitions */
+        .col-ac { width: 100px; }
+        .col-data { width: auto; }
+        .col-comm { width: 250px; }
+        .col-act { width: 110px; }
+
+        /* BUTTONS */
+        button { padding: 10px 18px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; color: #fff; transition: 0.2s ease; }
+        .btn-blue { background: var(--accent); }
+        .btn-dark { background: #334155; }
+        .btn-green { background: var(--success); }
+        .btn-red { background: var(--danger); }
+        
+        /* DROPDOWNS */
         .dropdown { position: relative; }
-        .dropdown-content { display: none; position: absolute; background-color: white; min-width: 140px; box-shadow: 0px 8px 16px rgba(0,0,0,0.2); z-index: 1001; border-radius: 6px; }
-        .dropdown-content button { width: 100%; border-radius: 0; justify-content: flex-start; background: white; color: #333; }
-        .show { display: block; }
-        .search-container { margin-left: auto; display: flex; align-items: center; gap: 5px; background: #f1f5f9; padding: 5px 10px; border-radius: 8px; border: 1px solid #ddd; }
-        .highlight-row { background-color: #fff3cd !important; outline: 2px solid var(--warning); }
-        .comm-input { padding: 6px; border: 1px solid #ced4da; border-radius: 4px; width: 150px; color: black; }
-        .panel { display: none; margin-bottom: 20px; border: 1px solid #ddd; padding: 15px; border-radius: 8px; background: white; }
-        .modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border-radius: 10px; z-index: 1100; width: 90%; max-width: 300px; }
-        .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 1050; }
-        #syncLoader { font-size: 11px; font-weight: bold; color: var(--success); }
-        @media print { .sticky-header, .panel, .modal, .overlay, button, .comm-input { display: none !important; } table { min-width: 100% !important; } }
+        .dropdown-content { display: none; position: absolute; background: #fff; min-width: 220px; box-shadow: 0 12px 24px rgba(0,0,0,0.15); border-radius: 8px; border: 1px solid #e2e8f0; top: 110%; z-index: 2000; }
+        .dropdown-content button { width: 100%; text-align: left; color: #0f172a; background: none; border-bottom: 1px solid #f1f5f9; border-radius: 0; padding: 12px; }
+        .dropdown-content button:hover { background: #f8fafc; color: var(--accent); }
+        .show { display: block !important; }
+
+        .panel { display: none; background: #fff; padding: 25px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 25px; animation: slideDown 0.3s ease; }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .highlight { background-color: #fef08a !important; color: #000; outline: 3px solid #eab308; }
+        .acc-tag { background: #dcfce7; color: #166534; padding: 4px 10px; border-radius: 5px; font-weight: 800; font-size: 11px; }
+
+        .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1500; }
+        .modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 30px; border-radius: 15px; z-index: 2001; width: 350px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); }
     </style>
 </head>
 <body>
 
 <div class="sticky-header">
-    <button style="background:var(--primary)" onclick="showModal('uploadModal')">➕ Upload</button>
-    <button style="background:var(--purple)" onclick="togglePanel('historySection')">📋 History</button>
-    <button style="background:var(--warning); color:black" onclick="togglePanel('recycleBinSection')">🗑️ Bin</button>
+    <button class="btn-blue" onclick="openUpload()">➕ Upload</button>
+    <button class="btn-dark" onclick="togglePanel('histPanel')">📋 History</button>
     
     <div class="dropdown">
-        <button style="background:var(--dark)" onclick="toggleDropdown()">📥 Download ▼</button>
-        <div id="downloadDropdown" class="dropdown-content">
-            <button onclick="executeExport('excel')">Excel</button>
-            <button onclick="executeExport('pdf')">PDF</button>
-            <button onclick="window.print()">Print</button>
+        <button class="btn-green" onclick="toggleDrop('accDrop')">📂 A/C: <span id="accTxt">All View</span> ▼</button>
+        <div id="accDrop" class="dropdown-content">
+            <button onclick="selectAcc('all', 'All View')">🌐 All View</button>
+            <div id="accList"></div>
         </div>
     </div>
 
-    <button style="background:var(--info)" onclick="syncData()">🔄 Sync</button>
-    <span id="syncLoader"></span>
-    <div class="counter-badge">Total: <span id="totalDataCount">0</span></div>
+    <button class="btn-red" onclick="togglePanel('binPanel')">🗑️ Bin</button>
     
-    <div class="search-container">
-        <input type="text" id="searchInput" oninput="initSearch()" placeholder="Search..." style="border:none; background:transparent; outline:none; width:100px;">
-        <span id="searchCount" style="font-size:11px;">0/0</span>
-        <button style="padding:2px; background:#ddd; color:black;" onclick="navSearch(-1)">▲</button>
-        <button style="padding:2px; background:#ddd; color:black;" onclick="navSearch(1)">▼</button>
+    <div class="dropdown">
+        <button class="btn-dark" onclick="toggleDrop('expDrop')">📥 Export Pro ▼</button>
+        <div id="expDrop" class="dropdown-content">
+            <button onclick="window.print()">🖨️ Print Report</button>
+            <button onclick="exportToExcel()">📊 Excel (Match Screen)</button>
+            <button onclick="exportToPDF()">📑 PDF (Match Screen)</button>
+        </div>
+    </div>
+
+    <button class="btn-dark" onclick="togglePanel('setPanel')">⚙️ Settings</button>
+
+    <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Search keyword..." onkeypress="handleSearch(event)">
+        <button class="search-nav-btn" onclick="navSearch(-1)">↑</button>
+        <button class="search-nav-btn" onclick="navSearch(1)">↓</button>
     </div>
 </div>
 
 <div class="content-area">
-    <div id="historySection" class="panel"><h3>Active History</h3><div class="table-container"><table><thead><tr><th>Date</th><th>File</th><th>Action</th></tr></thead><tbody id="historyBody"></tbody></table></div></div>
-    <div id="recycleBinSection" class="panel"><h3>Recycle Bin</h3><div class="table-container"><table><thead><tr><th>Date</th><th>File</th><th>Action</th></tr></thead><tbody id="binBody"></tbody></table></div></div>
-    <div class="table-container"><table id="mainDataTable"><thead id="tableHead"></thead><tbody id="tableBody"></tbody></table></div>
+    <div id="setPanel" class="panel">
+        <h3>⚙️ Ledger Management</h3>
+        <div style="display:flex; gap:10px; margin-bottom:15px;">
+            <input type="text" id="newAcc" placeholder="Account Name" style="flex:1; padding:12px; border-radius:6px; border:1px solid #cbd5e1;">
+            <button class="btn-green" onclick="addAcc()">Add Ledger</button>
+        </div>
+        <div class="table-container"><table><tbody id="accSettingsBody"></tbody></table></div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-top:20px;">
+            <input type="text" id="extUrl" placeholder="Secondary Sync URL" style="padding:12px; border-radius:6px; border:1px solid #cbd5e1;">
+            <input type="email" id="uEmail" placeholder="Admin Email Address" style="padding:12px; border-radius:6px; border:1px solid #cbd5e1;">
+        </div>
+        <button class="btn-blue" style="margin-top:20px;" onclick="saveConfig()">Save Settings</button>
+    </div>
+
+    <div id="histPanel" class="panel"><h3>📋 History</h3><div class="table-container"><table><thead><tr><th class="col-act">Date</th><th class="col-ac">Account</th><th class="col-data">File Name</th><th class="col-act">Action</th></tr></thead><tbody id="histBody"></tbody></table></div></div>
+    <div id="binPanel" class="panel"><h3>🗑️ Bin</h3><div class="table-container"><table><thead><tr><th class="col-act">Type</th><th class="col-data">Name</th><th class="col-act">Restore</th><th class="col-act">Delete</th></tr></thead><tbody id="binBody"></tbody></table></div></div>
+
+    <h3 style="margin-bottom:20px;">📊 Current Data: <span id="titleAcc" style="color:var(--accent)">All View</span></h3>
+    <div class="table-container">
+        <table id="mainTable"><thead id="tHead"></thead><tbody id="tBody"></tbody></table>
+    </div>
 </div>
 
-<div class="overlay" id="overlay" onclick="hideAllModals()"></div>
-<div class="modal" id="uploadModal">
-    <h3>Upload</h3>
-    <input type="date" id="uploadDate" style="width:100%; margin-bottom:10px; padding:8px;">
-    <button style="background:var(--success); width:100%" onclick="triggerFileInput()">Confirm & Open</button>
+<div class="overlay" id="overlay" onclick="closeAll()"></div>
+<div class="modal" id="upModal">
+    <h3>Upload Data</h3>
+    <input type="date" id="upDate" style="width:100%; margin-bottom:20px; padding:12px; border:1px solid #cbd5e1; border-radius:8px;">
+    <button class="btn-blue" style="width:100%;" onclick="document.getElementById('fIn').click()">Select File</button>
 </div>
-
-<input type="file" id="fileInput" accept=".xlsx, .xls" hidden>
+<input type="file" id="fIn" hidden accept=".xlsx, .xls">
 
 <script>
-const scriptURL = 'https://script.google.com/macros/s/AKfycbwMA8mXLiUKv1JfEGyyU9woNg9fk2PDumMUWMyKcOdzgNTLdMmBLTf8-X8TRJ-4ZCev/exec'; 
-let cloudData = [];
-let searchMatches = [];
-let currentSearchIdx = -1;
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxJTT7TCNx0xAlHzsK_4BNc-m1QJ3YY0hy4kq3rgDUid5BuYEK3XhOTMca2JAhIV2j-TA/exec';
+    let db = [], accounts = JSON.parse(localStorage.getItem('myAccs')) || [], curAcc = 'all', searchResults = [], searchIdx = -1;
 
-window.onload = syncData;
-
-async function syncData() {
-    document.getElementById('syncLoader').innerText = "⌛ Syncing...";
-    try {
-        const res = await fetch(scriptURL);
-        cloudData = await res.json();
-        renderAll();
-        document.getElementById('syncLoader').innerText = "✅ Live";
-    } catch (e) { document.getElementById('syncLoader').innerText = "❌ Error"; }
-}
-
-function renderAll() {
-    const body = document.getElementById("tableBody"), head = document.getElementById("tableHead");
-    const hBody = document.getElementById("historyBody"), bBody = document.getElementById("binBody");
-    body.innerHTML = ""; hBody.innerHTML = ""; bBody.innerHTML = "";
-    
-    if (cloudData.length <= 1) return;
-
-    const sample = cloudData[1][3].split(" | ");
-    head.innerHTML = "<tr>" + sample.map(h => `<th>Data</th>`).join('') + "<th>Comment</th><th class='no-print'>Actions</th></tr>";
-
-    let filesSeen = new Set();
-    let activeCount = 0;
-
-    cloudData.forEach((row, idx) => {
-        if(idx === 0) return;
-        const [date, time, fileName, rowData, commentHistory, status, fileId] = row;
-
-        if (!filesSeen.has(fileId)) {
-            let target = (status === "ACTIVE") ? hBody : bBody;
-            let trP = target.insertRow();
-            trP.innerHTML = `<td>${date}</td><td>${fileName}</td><td>
-                ${status === "ACTIVE" ? 
-                `<button style="background:var(--danger)" onclick="updateStatus('${fileId}','ARCHIVED')">Archive</button>` : 
-                `<button style="background:var(--success)" onclick="updateStatus('${fileId}','ACTIVE')">Restore</button>
-                 <button style="background:var(--dark)" onclick="permDelete('${fileId}')">Delete</button>`}</td>`;
-            filesSeen.add(fileId);
-        }
-
-        if (status === "ACTIVE") {
-            activeCount++;
-            let tr = body.insertRow();
-            rowData.split(" | ").forEach(cell => { tr.insertCell().innerText = cell; });
-            
-            let comms = (commentHistory || "").split(" | ");
-            let lastComm = comms[comms.length-1].replace(/^\d+(st|nd|rd|th):\s*/, '');
-            
-            let cCell = tr.insertCell();
-            cCell.innerHTML = `<div id="txt-${idx}">${lastComm}</div><input type="text" id="inp-${idx}" class="comm-input" style="display:none" value="${lastComm}">`;
-            
-            let aCell = tr.insertCell();
-            aCell.className = "no-print";
-            aCell.innerHTML = `<button style="background:var(--success)" onclick="saveComm(${idx},'${rowData}')">Save</button>
-                               <button style="background:var(--warning);color:black" onclick="showEdit(${idx})">Edit</button>`;
-        }
-    });
-    document.getElementById("totalDataCount").innerText = activeCount;
-    initSearch();
-}
-
-// --- SEARCH LOGIC ---
-function initSearch() {
-    let val = document.getElementById("searchInput").value.toLowerCase();
-    let rows = Array.from(document.getElementById("tableBody").rows);
-    rows.forEach(r => r.classList.remove('highlight-row'));
-    if(!val) { searchMatches = []; currentSearchIdx = -1; document.getElementById("searchCount").innerText = "0/0"; return; }
-    searchMatches = rows.filter(r => r.textContent.toLowerCase().includes(val));
-    currentSearchIdx = searchMatches.length > 0 ? 0 : -1;
-    updateSearchDisplay();
-}
-
-function navSearch(dir) {
-    if(!searchMatches.length) return;
-    searchMatches[currentSearchIdx]?.classList.remove('highlight-row');
-    currentSearchIdx = (currentSearchIdx + dir + searchMatches.length) % searchMatches.length;
-    updateSearchDisplay();
-}
-
-function updateSearchDisplay() {
-    if(currentSearchIdx !== -1) {
-        let t = searchMatches[currentSearchIdx];
-        t.classList.add('highlight-row');
-        t.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        document.getElementById("searchCount").innerText = `${currentSearchIdx + 1}/${searchMatches.length}`;
-    }
-}
-
-// --- DOWNLOAD LOGIC ---
-function executeExport(type) {
-    let activeRows = cloudData.filter((r, i) => i > 0 && r[5] === "ACTIVE");
-    if(!activeRows.length) return alert("No data!");
-
-    const headers = [...activeRows[0][3].split(" | "), "Comment"];
-    const body = activeRows.map(r => {
-        let comms = r[4].split(" | ");
-        let last = comms[comms.length-1].replace(/^\d+(st|nd|rd|th):\s*/, '');
-        return [...r[3].split(" | "), last];
-    });
-
-    if(type === 'excel') {
-        let ws = XLSX.utils.aoa_to_sheet([headers, ...body]);
-        let wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Data");
-        XLSX.writeFile(wb, "Transactions.xlsx");
-    } else if(type === 'pdf') {
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF('l', 'mm', 'a4');
-        doc.autoTable({ head: [headers], body: body });
-        doc.save("Transactions.pdf");
-    }
-    toggleDropdown();
-}
-
-// --- ACTION LOGIC ---
-async function triggerFileInput() {
-    if(!document.getElementById('uploadDate').value) return alert("Date!");
-    document.getElementById('fileInput').click();
-    hideAllModals();
-}
-
-document.getElementById("fileInput").addEventListener("change", function (e) {
-    let file = e.target.files[0];
-    let reader = new FileReader();
-    reader.onload = async function (e) {
-        let wb = XLSX.read(new Uint8Array(e.target.result), { type: "array" });
-        let raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 }).filter(r => r.length > 0);
-        await fetch(scriptURL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({
-            action: "UPLOAD_FILE", fileName: file.name, uploadDate: document.getElementById('uploadDate').value,
-            fileId: "F"+Date.now(), rows: raw.slice(1)
-        })});
-        setTimeout(syncData, 1500);
+    window.onload = () => {
+        document.getElementById('extUrl').value = localStorage.getItem('extUrl') || '';
+        document.getElementById('uEmail').value = localStorage.getItem('uEmail') || '';
+        refreshAccs(); sync();
     };
-    reader.readAsArrayBuffer(file);
-});
 
-async function saveComm(idx, rowData) {
-    let val = document.getElementById(`inp-${idx}`).value;
-    let count = (cloudData[idx][4].split(" | ").filter(x => x).length) + 1;
-    let ord = (n) => n + (["st","nd","rd"][((n+90)%100-10)%10-1] || "th");
-    await fetch(scriptURL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({
-        action: "UPDATE_COMMENT", rowData: rowData, comment: ord(count) + ": " + val
-    })});
-    setTimeout(syncData, 1000);
-}
+    function toggleDrop(id) { let el = document.getElementById(id); let open = el.classList.contains('show'); closeAll(); if(!open) el.classList.add('show'); }
+    function closeAll() { document.querySelectorAll('.dropdown-content, .overlay').forEach(e => e.classList.remove('show')); document.getElementById('upModal').style.display='none'; document.getElementById('overlay').style.display='none'; }
+    function togglePanel(id) { let p = document.getElementById(id); let vis = p.style.display === 'block'; document.querySelectorAll('.panel').forEach(x => x.style.display='none'); if(!vis) p.style.display='block'; }
 
-async function updateStatus(fid, stat) {
-    await fetch(scriptURL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: "CHANGE_STATUS", fileId: fid, status: stat })});
-    setTimeout(syncData, 1000);
-}
+    function addAcc() { 
+        let n = document.getElementById('newAcc').value; if(!n) return;
+        accounts.push({id: n, name: n, status: 'ACTIVE'}); 
+        document.getElementById('newAcc').value = ''; saveAccs(); 
+    }
+    function saveAccs() { localStorage.setItem('myAccs', JSON.stringify(accounts)); refreshAccs(); render(); }
+    function editLedger(id) {
+        let newName = prompt("Edit Ledger Name:", accounts.find(a=>a.id===id).name);
+        if(newName) { accounts.find(a=>a.id===id).name = newName; saveAccs(); }
+    }
 
-async function permDelete(fid) {
-    if(!confirm("Delete forever from Cloud?")) return;
-    await fetch(scriptURL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: "PERMANENT_DELETE", fileId: fid })});
-    setTimeout(syncData, 1000);
-}
+    function refreshAccs() {
+        let list = document.getElementById('accList'), set = document.getElementById('accSettingsBody');
+        list.innerHTML = ''; set.innerHTML = '';
+        accounts.forEach(a => {
+            if(a.status === 'ACTIVE') {
+                list.innerHTML += `<button onclick="selectAcc('${a.id}','${a.name}')">${a.name}</button>`;
+                set.innerHTML += `<tr><td>${a.name}</td><td><button class="btn-blue" style="margin-right:5px;" onclick="editLedger('${a.id}')">Edit</button><button class="btn-red" onclick="updAcc('${a.id}','BIN')">Bin</button></td></tr>`;
+            }
+        });
+    }
 
-function showEdit(idx) { document.getElementById(`txt-${idx}`).style.display="none"; document.getElementById(`inp-${idx}`).style.display="block"; }
-function toggleDropdown() { document.getElementById("downloadDropdown").classList.toggle("show"); }
-function togglePanel(id) { 
-    let p = document.getElementById(id); 
-    p.style.display = (p.style.display === "block") ? "none" : "block"; 
-    if(p.style.display === "block") p.scrollIntoView({ behavior: 'smooth' });
-}
-function showModal(id) { document.getElementById(id).style.display = 'block'; document.getElementById('overlay').style.display = 'block'; }
-function hideAllModals() { document.querySelectorAll('.modal').forEach(m => m.style.display = 'none'); document.getElementById('overlay').style.display = 'none'; }
+    function updAcc(id, s) { accounts.find(x=>x.id===id).status=s; saveAccs(); }
+    function selectAcc(id, n) { curAcc = id; document.getElementById('accTxt').innerText = n; document.getElementById('titleAcc').innerText = n; closeAll(); render(); }
+    function saveConfig() { localStorage.setItem('extUrl', document.getElementById('extUrl').value); localStorage.setItem('uEmail', document.getElementById('uEmail').value); alert("Settings Updated!"); }
+
+    async function sync() {
+        try { let r = await fetch(SCRIPT_URL); db = await r.json(); render(); } catch(e) { console.error("Sync Error"); }
+    }
+
+    function render() {
+        let b = document.getElementById('tBody'); b.innerHTML = '';
+        let h = document.getElementById('histBody'); h.innerHTML = '';
+        let bin = document.getElementById('binBody'); bin.innerHTML = '';
+        if(db.length < 2) return;
+        let isAll = curAcc === 'all', cols = db[1][3].split(" | ");
+        
+        // TABLE HEAD: Fixed Width Classes Added
+        document.getElementById('tHead').innerHTML = `<tr>
+            ${isAll?'<th class="col-ac">Account No</th>':''}
+            ${cols.map(c=>`<th class="col-data">${c}</th>`).join('')}
+            <th class="col-comm">Comment</th>
+            <th class="col-act no-print">Action</th>
+        </tr>`;
+        
+        let seen = new Set();
+        db.forEach((row, idx) => {
+            if(idx === 0) return;
+            const [date, time, file, data, comm, stat, fid, lid] = row;
+            if(!isAll && lid !== curAcc) return;
+            const acc = accounts.find(x=>x.id === lid);
+
+            if(acc && acc.status === 'BIN') {
+                if(!seen.has(lid)) { bin.innerHTML += `<tr><td>LEDGER</td><td>${acc.name}</td><td><button class="btn-green" onclick="updAcc('${acc.id}','ACTIVE')">Restore</button></td><td><button class="btn-red" onclick="permDelAcc('${acc.id}')">Delete</button></td></tr>`; seen.add(lid); }
+                return;
+            }
+            if(!seen.has(fid)) {
+                if(stat === 'ACTIVE') h.innerHTML += `<tr><td>${date}</td><td>${acc?acc.name:lid}</td><td>${file}</td><td><button class="btn-red" onclick="cloudStat('${fid}','BIN')">Bin</button></td></tr>`;
+                else bin.innerHTML += `<tr><td>FILE</td><td>${file}</td><td><button class="btn-green" onclick="cloudStat('${fid}','ACTIVE')">Restore</button></td><td><button class="btn-red" onclick="cloudDel('${fid}')">Delete</button></td></tr>`;
+                seen.add(fid);
+            }
+            if(stat === 'ACTIVE') {
+                let tr = b.insertRow();
+                if(isAll) tr.insertCell().innerHTML = `<span class="acc-tag">${acc?acc.name:lid}</span>`;
+                data.split(" | ").forEach(v => tr.insertCell().innerText = v);
+                tr.insertCell().innerHTML = `<div id="v${idx}" style="min-height:20px;">${comm}</div><input id="i${idx}" style="display:none; width:95%; padding:5px;" value="${comm}" onblur="saveComm(${idx}, this.value)">`;
+                tr.insertCell().innerHTML = `<button class="btn-green no-print" onclick="document.getElementById('i${idx}').style.display='block'">Edit</button>`;
+            }
+        });
+    }
+
+    async function cloudStat(fid, s) { fetch(SCRIPT_URL, {method:'POST', mode:'no-cors', body:JSON.stringify({action:"CHANGE_STATUS", fileId:fid, status:s})}); setTimeout(sync, 1000); }
+    async function cloudDel(fid) { if(confirm("Forever?")) { fetch(SCRIPT_URL, {method:'POST', mode:'no-cors', body:JSON.stringify({action:"PERMANENT_DELETE", fileId:fid})}); setTimeout(sync, 1000); } }
+    function permDelAcc(id) { accounts = accounts.filter(x=>x.id!==id); saveAccs(); }
+
+    async function saveComm(idx, v) {
+        document.getElementById('v'+idx).innerText = v; document.getElementById('i'+idx).style.display='none';
+        fetch(SCRIPT_URL, {method:'POST', mode:'no-cors', body:JSON.stringify({action:"UPDATE_COMMENT", rowData:db[idx][3], comment:v})});
+    }
+
+    function handleSearch(e) { if(e.key === 'Enter') { searchTable(); navSearch(1); } }
+    function searchTable() {
+        let input = document.getElementById('searchInput').value.toLowerCase();
+        let rows = document.querySelectorAll("#tBody tr");
+        searchResults = [];
+        rows.forEach(r => {
+            r.classList.remove('highlight');
+            if(input && r.innerText.toLowerCase().includes(input)) { searchResults.push(r); r.classList.add('highlight'); }
+        });
+        searchIdx = -1;
+    }
+    function navSearch(dir) {
+        if(searchResults.length === 0) return;
+        searchIdx = (searchIdx + dir + searchResults.length) % searchResults.length;
+        searchResults[searchIdx].scrollIntoView({behavior:'smooth', block:'center'});
+    }
+
+    function exportToExcel() {
+        let wb = XLSX.utils.table_to_book(document.getElementById('mainTable'));
+        XLSX.writeFile(wb, `Report_Excel_Match_${curAcc}.xlsx`);
+    }
+
+    function exportToPDF() {
+        const { jsPDF } = window.jspdf;
+        let doc = new jsPDF('l', 'pt', 'a4');
+        doc.autoTable({ 
+            html: '#mainTable', 
+            theme: 'grid', 
+            styles: { fontSize: 8, cellPadding: 5, lineWidth: 0.5, lineColor: [148, 163, 184] },
+            headStyles: { fillColor: [15, 23, 42], textColor: 255 },
+            columnStyles: { 0: { cellWidth: 80 } }
+        });
+        doc.save(`Report_PDF_Match_${curAcc}.pdf`);
+    }
+
+    function openUpload() { if(curAcc==='all') return alert("Select Ledger!"); document.getElementById('upModal').style.display='block'; document.getElementById('overlay').style.display='block'; }
+    document.getElementById('fIn').onchange = (e) => {
+        let f = e.target.files[0], r = new FileReader();
+        r.onload = (ev) => {
+            let json = XLSX.utils.sheet_to_json(XLSX.read(new Uint8Array(ev.target.result), {type:'array'}).Sheets[XLSX.read(new Uint8Array(ev.target.result), {type:'array'}).SheetNames[0]], {header:1});
+            fetch(SCRIPT_URL, {method:'POST', mode:'no-cors', body:JSON.stringify({action:"UPLOAD_FILE", fileName:f.name, uploadDate:document.getElementById('upDate').value, fileId:"F"+Date.now(), ledgerId:curAcc, rows:json.slice(1)})});
+            alert("Sent to Google Sheet!"); closeAll(); setTimeout(sync, 1500);
+        }; r.readAsArrayBuffer(f);
+    };
 </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
+
+
